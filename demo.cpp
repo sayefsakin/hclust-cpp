@@ -9,11 +9,15 @@
 
 #include <math.h>
 #include <string.h>
+#include <unistd.h>
+#include <cstdint>
 
 #include <string>
 #include <vector>
 #include <stdio.h>
 #include <algorithm>
+#include <fstream>
+#include <iostream>
 
 #include "fastcluster.h"
 
@@ -47,26 +51,40 @@ private:
   }
 };
 
-// line segment distance (cosine dissimilarity)
-double distance(const Segment& s1, const Segment& s2) {
-  double sprod = s1.dir.x*s2.dir.x + s1.dir.y*s2.dir.y;
-  double d = 1 - sprod*sprod;
-  if (d < 0.0)
-    return 0;
-  else
-    return d;
+// // line segment distance (cosine dissimilarity)
+// double distance(const Segment& s1, const Segment& s2) {
+//   double sprod = s1.dir.x*s2.dir.x + s1.dir.y*s2.dir.y;
+//   double d = 1 - sprod*sprod;
+//   if (d < 0.0)
+//     return 0;
+//   else
+//     return d;
+// }
+
+double distance(const double& s1, const double& s2) {
+  return fabs(s1-s2);
 }
 
+double distance_event(const double& s11, const double& s12, const double& s21, const double& s22) {
+  if (s12 < s21)
+    return s21 - s12;
+  return s11 - s22;
+}
 
-// main program
+int changeMerge(int i, int N){
+  if (i < 0) {
+    return (i+1) * -1;
+  } else {
+    return (i - 1) + N;
+  }
+}
+
 int main(int argc, char** argv)
 {
-
-  int i,j,k,npoints;
-
-  // parse command line
   std::string opt_infile;
+  int i,j,k,npoints;
   int opt_method = HCLUST_METHOD_SINGLE;
+
   const char* usagemsg = "Usage: hclust-demo <infile> [-m (single|complete|average|median)]\n";
   for (i=1; i<argc; i++) {
     if (0 == strcmp(argv[i], "-m")) {
@@ -97,37 +115,49 @@ int main(int argc, char** argv)
       opt_infile = argv[i];
     }
   }
+
+  // std::vector<double> v = {2, 8, 0, 4, 1, 9, 9, 0, 0, 10};
+  std::vector<double> v;// = {1,2,5,6,11,12,100,110,210,212};
   if (opt_infile == "") {
-    fputs(usagemsg, stderr);
+    const std::string baseLocation = "/mnt/c/Users/sayef/IdeaProjects/traveler-integrated/data_handler/cgal_libs/cgal_server/location_data/";
+    opt_infile = baseLocation + "t" + ".loc";
+    
+  }
+
+  std::ifstream infile(opt_infile);
+
+  if (!infile) {
+    std::cerr << "Error: Unable to open file.\n";
     return 1;
   }
-  
-  // read line segments from input file
-  std::vector<Segment> segs;
-  double x1,x2,y1,y2;
-  FILE* f = fopen(opt_infile.c_str(), "r");
-  if (!f) {
-    fprintf(stderr, "Cannot open '%s'\n", opt_infile.c_str());
-    return 2;
-  }
-  npoints = 0;
-  while (!feof(f)) {
-    npoints++;
-    k = fscanf(f, "%lf,%lf,%lf,%lf\n", &x1, &x2, &y1, &y2);
-    if (k != 4) {
-      fprintf(stderr, "Error in line %i of '%s': wrong format\n", npoints, argv[1]);
-      return 3;
-    }
-    segs.push_back(Segment(Point(x1,x2), Point(y1,y2)));
-  }
-  fclose(f);
 
+  uint64_t value;
+  // Read integers line by line
+  while (infile >> value) {
+      v.push_back(value);
+  }
+
+  infile.close();
+
+  
+  // npoints = v.size();
+  // // computation of condensed distance matrix
+  // double* distmat = new double[(npoints*(npoints-1))/2];
+  // k = 0;
+  // for (i=0; i<npoints; i++) {
+  //   for (j=i+1; j<npoints; j++) {
+  //     distmat[k] = distance(v[i], v[j]);
+  //     k++;
+  //   }
+  // }
+
+  npoints = v.size() / 2;
   // computation of condensed distance matrix
   double* distmat = new double[(npoints*(npoints-1))/2];
   k = 0;
   for (i=0; i<npoints; i++) {
     for (j=i+1; j<npoints; j++) {
-      distmat[k] = distance(segs[i], segs[j]);
+      distmat[k] = distance_event(v[i*2], v[(i*2)+1], v[j*2], v[(j*2)+1]);
       k++;
     }
   }
@@ -135,16 +165,24 @@ int main(int argc, char** argv)
   // clustering call
   int* merge = new int[2*(npoints-1)];
   double* height = new double[npoints-1];
-  hclust_fast(npoints, distmat, opt_method, merge, height);
+  int* node_size = new int[2*(npoints-1)];
+  hclust_fast(npoints, distmat, opt_method, merge, height, node_size);
 
   int* labels = new int[npoints];
-  cutree_k(npoints, merge, 2, labels);
-  //cutree_cdist(npoints, merge, height, 0.5, labels);
+  // cutree_k(npoints, merge, 3, labels);
+  cutree_cdist(npoints, merge, height, 40000, labels);
   
   // print result
   for (i=0; i<npoints; i++) {
-    printf("%3.2f,%3.2f,%3.2f,%3.2f,%i\n",
-           segs[i].p1.x, segs[i].p1.y, segs[i].p2.x, segs[i].p2.y, labels[i]);
+    printf("%d: %.0lf, %.0lf, %d\n",
+           i, v[i*2], v[(i*2)+1], labels[i]);
+  }
+  printf("\n");
+  // print result
+  for (i=0; i<npoints-1; i++) {
+
+    printf("%.1lf, %.1lf, %0.1lf, %.1lf\n",
+           (double)changeMerge(merge[i], npoints), (double)changeMerge(merge[i+npoints-1], npoints), (double)height[i], (double)node_size[i]);
   }
   
   // clean up
@@ -152,7 +190,107 @@ int main(int argc, char** argv)
   delete[] merge;
   delete[] height;
   delete[] labels;
+  delete[] node_size;
 
   
   return 0;
 }
+
+// // main program
+// int main_back(int argc, char** argv)
+// {
+
+//   int i,j,k,npoints;
+
+//   // parse command line
+  // std::string opt_infile;
+//   int opt_method = HCLUST_METHOD_SINGLE;
+  // const char* usagemsg = "Usage: hclust-demo <infile> [-m (single|complete|average|median)]\n";
+  // for (i=1; i<argc; i++) {
+  //   if (0 == strcmp(argv[i], "-m")) {
+  //     i++;
+  //     if (i<argc) {
+  //       if (0 == strcmp(argv[i], "single"))
+  //           opt_method = HCLUST_METHOD_SINGLE;
+  //       else if (0 == strcmp(argv[i], "complete"))
+  //           opt_method = HCLUST_METHOD_COMPLETE;
+  //       else if (0 == strcmp(argv[i], "average"))
+  //           opt_method = HCLUST_METHOD_AVERAGE;
+  //       else if (0 == strcmp(argv[i], "median"))
+  //           opt_method = HCLUST_METHOD_MEDIAN;
+  //       else {
+  //         fputs(usagemsg, stderr);
+  //         return 1;
+  //       }
+  //     } else {
+  //       fputs(usagemsg, stderr);
+  //       return 1;
+  //     }
+  //   }
+  //   else if (argv[i][0] == '-') {
+  //     fputs(usagemsg, stderr);
+  //     return 1;
+  //   }
+  //   else {
+  //     opt_infile = argv[i];
+  //   }
+  // }
+  // if (opt_infile == "") {
+  //   fputs(usagemsg, stderr);
+  //   return 1;
+  // }
+  
+//   // read line segments from input file
+//   std::vector<Segment> segs;
+//   double x1,x2,y1,y2;
+//   FILE* f = fopen(opt_infile.c_str(), "r");
+//   if (!f) {
+//     fprintf(stderr, "Cannot open '%s'\n", opt_infile.c_str());
+//     return 2;
+//   }
+//   npoints = 0;
+//   while (!feof(f)) {
+//     npoints++;
+//     k = fscanf(f, "%lf,%lf,%lf,%lf\n", &x1, &x2, &y1, &y2);
+//     if (k != 4) {
+//       fprintf(stderr, "Error in line %i of '%s': wrong format\n", npoints, argv[1]);
+//       return 3;
+//     }
+//     segs.push_back(Segment(Point(x1,x2), Point(y1,y2)));
+//   }
+//   fclose(f);
+
+//   // computation of condensed distance matrix
+//   double* distmat = new double[(npoints*(npoints-1))/2];
+//   k = 0;
+//   for (i=0; i<npoints; i++) {
+//     for (j=i+1; j<npoints; j++) {
+//       distmat[k] = distance(segs[i], segs[j]);
+//       k++;
+//     }
+//   }
+
+//   // clustering call
+//   int* merge = new int[2*(npoints-1)];
+//   double* height = new double[npoints-1];
+//   hclust_fast(npoints, distmat, opt_method, merge, height);
+
+//   int* labels = new int[npoints];
+//   cutree_k(npoints, merge, 5, labels);
+//   //cutree_cdist(npoints, merge, height, 0.5, labels);
+  
+//   // print result
+//   for (i=0; i<npoints; i++) {
+//     printf("%3.2f,%3.2f,%3.2f,%3.2f,%i\n",
+//            segs[i].p1.x, segs[i].p1.y, segs[i].p2.x, segs[i].p2.y, labels[i]);
+//   }
+  
+//   // clean up
+//   delete[] distmat;
+//   delete[] merge;
+//   delete[] height;
+//   delete[] labels;
+
+  
+//   return 0;
+// }

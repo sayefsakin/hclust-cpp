@@ -6,7 +6,7 @@
 # compiler options
 #--------------------------------------------
 CC = g++
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -DNO_INCLUDE_FENV
 LDFLAGS = -lstdc++
 
 # project files

@@ -129,7 +129,7 @@ void cutree_cdist(int n, const int* merge, double* height, double cdist, int* la
 //   0 = ok
 //   1 = invalid method
 //
-int hclust_fast(int n, double* distmat, int method, int* merge, double* height) {
+int hclust_fast(int n, double* distmat, int method, int* merge, double* height, int* node_size) {
   
   // call appropriate culstering function
   cluster_result Z2(n-1);
@@ -158,9 +158,9 @@ int hclust_fast(int n, double* distmat, int method, int* merge, double* height) 
   
   int* order = new int[n];
   if (method == HCLUST_METHOD_MEDIAN) {
-    generate_R_dendrogram<true>(merge, height, order, Z2, n);
+    generate_R_dendrogram<true>(merge, height, order, Z2, n, node_size);
   } else {
-    generate_R_dendrogram<false>(merge, height, order, Z2, n);
+    generate_R_dendrogram<false>(merge, height, order, Z2, n, node_size);
   }
 
   delete[] order; // only needed for visualization

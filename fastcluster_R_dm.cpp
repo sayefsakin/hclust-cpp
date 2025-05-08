@@ -66,7 +66,7 @@ void order_nodes(const int N, const int * const merge, const t_index * const nod
 #define size_(r_) ( ((r_<N) ? 1 : node_size[r_-N]) )
 
 template <const bool sorted>
-void generate_R_dendrogram(int * const merge, double * const height, int * const order, cluster_result & Z2, const int N) {
+void generate_R_dendrogram(int * const merge, double * const height, int * const order, cluster_result & Z2, const int N, int* ns) {
   // The array "nodes" is a union-find data structure for the cluster
   // identites (only needed for unsorted cluster_result input).
   union_find nodes(sorted ? 0 : N);
@@ -109,6 +109,7 @@ void generate_R_dendrogram(int * const merge, double * const height, int * const
                               : static_cast<int>(node2)-N+1;
     height[i] = Z2[i]->dist;
     node_size[i] = size_(node1) + size_(node2);
+    ns[i] = node_size[i];
   }
 
   order_nodes(N, merge, node_size, order);
