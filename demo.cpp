@@ -79,6 +79,42 @@ int changeMerge(int i, int N){
   }
 }
 
+// trying the search query
+// search logic
+// if bin size is less than cluster length, then go down
+// else return the start end point of the current cluster
+// dfs on the start and end time query
+void dfs(int *merge, int npoints, int start_t, int end_t, int bin_size, int c_node, double* start_events, double* end_events) {
+  int root_node = c_node + npoints;
+  int start_time = start_events[root_node];
+  int end_time = end_events[root_node];
+  if(start_time >= end_t || end_time <= start_t) {
+    return;
+  }
+  if(bin_size >= (end_time - start_time + 1)) {
+    std::cout << "Cluster: " << root_node << ", Start: " << start_time << ", End: " << end_time << std::endl;
+    return;
+  }
+  if(root_node < npoints) {
+    if(start_time < start_t) {
+      start_time = start_t;
+    }
+    if(end_time > end_t) {
+      end_time = end_t;
+    }
+    std::cout << "Cluster-Leaf: " << root_node << ", Start: " << start_time << ", End: " << end_time << std::endl;
+    return;
+  }
+  // this is a compound node
+  int left_node_index = changeMerge(merge[c_node], npoints);
+  int right_node_index = changeMerge(merge[c_node+npoints-1], npoints);
+  if(end_events[left_node_index] > start_events[right_node_index]) {
+    std::swap(left_node_index, right_node_index);
+  }
+  dfs(merge, npoints, start_t, end_t, bin_size, left_node_index - npoints, start_events, end_events);
+  dfs(merge, npoints, start_t, end_t, bin_size, right_node_index - npoints, start_events, end_events);
+}
+
 int main(int argc, char** argv)
 {
   std::string opt_infile;
@@ -166,7 +202,33 @@ int main(int argc, char** argv)
   int* merge = new int[2*(npoints-1)];
   double* height = new double[npoints-1];
   int* node_size = new int[2*(npoints-1)];
+
+  double* start_events = new double[2*(npoints-1)];
+  double* end_events = new double[2*(npoints-1)];
   hclust_fast(npoints, distmat, opt_method, merge, height, node_size);
+
+  int left_node_index, right_node_index, root_node_index;
+  for (i=0; i<npoints-1; i++) {
+    left_node_index = changeMerge(merge[i], npoints);
+    if(left_node_index < npoints) {
+      start_events[left_node_index] = v[left_node_index*2];
+      end_events[left_node_index] = v[(left_node_index*2)+1];
+    }
+
+    right_node_index = changeMerge(merge[i+npoints-1], npoints);
+    if(right_node_index < npoints) {
+      start_events[right_node_index] = v[right_node_index*2];
+      end_events[right_node_index] = v[(right_node_index*2)+1];
+    }
+
+    if(end_events[left_node_index] > start_events[right_node_index]) {
+      std::swap(left_node_index, right_node_index);
+    }
+    
+    root_node_index = i + npoints;
+    start_events[root_node_index] = start_events[left_node_index];
+    end_events[root_node_index] = end_events[right_node_index];
+  }
 
   int* labels = new int[npoints];
   // cutree_k(npoints, merge, 3, labels);
@@ -181,9 +243,27 @@ int main(int argc, char** argv)
   // print result
   for (i=0; i<npoints-1; i++) {
 
-    printf("%.1lf, %.1lf, %0.1lf, %.1lf\n",
-           (double)changeMerge(merge[i], npoints), (double)changeMerge(merge[i+npoints-1], npoints), (double)height[i], (double)node_size[i]);
+    printf("%.1lf, %.1lf, %0.1lf, %.1lf  --> left(%d %d) right(%d %d) root(%d %d)\n",
+           (double)changeMerge(merge[i], npoints), (double)changeMerge(merge[i+npoints-1], npoints), (double)height[i], (double)node_size[i],
+           (int)start_events[changeMerge(merge[i], npoints)], (int)end_events[changeMerge(merge[i], npoints)],
+           (int)start_events[changeMerge(merge[i+npoints-1], npoints)], (int)end_events[changeMerge(merge[i+npoints-1], npoints)],
+           (int)start_events[i+npoints], (int)end_events[i+npoints]);
   }
+
+
+  std::cout << std::endl;
+  // trying the search query
+  // search logic
+  // if bin size is less than cluster length, then go down
+  // else return the start end point of the current cluster
+  // dfs on the start and end time query
+  int start_time = 10;
+  int end_time = 1150;
+  int bin_size = 10;
+  i = npoints-2;
+  dfs(merge, npoints, start_time, end_time, bin_size, npoints-2, start_events, end_events);
+  // dfs(merge, npoints, start_time, end_time, bin_size, i+npoints-1, start_events, end_events);
+
   
   // clean up
   delete[] distmat;
@@ -191,7 +271,8 @@ int main(int argc, char** argv)
   delete[] height;
   delete[] labels;
   delete[] node_size;
-
+  delete[] start_events;
+  delete[] end_events;
   
   return 0;
 }
